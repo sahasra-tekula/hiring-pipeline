@@ -279,3 +279,26 @@ cd frontend
 npm install
 npm run dev
 ```
+## 📸 Screenshots
+
+### Recruiter Dashboard
+![Recruiter](./screenshots/recruiter.png)
+
+---
+
+### Applicant Applying
+
+![Apply Step 1](./screenshots/apply1.png)
+![Apply Step 2](./screenshots/apply2.png)
+
+---
+
+### Queue Behavior
+![Queue](./screenshots/queue.png)
+
+---
+
+### Promotion & Acknowledgement
+
+![Promotion](./screenshots/promotion2.png)
+![Acknowledgement](./screenshots/promotion1.png)
