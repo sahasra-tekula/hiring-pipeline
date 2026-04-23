@@ -1,111 +1,102 @@
-# Next In Line — Hiring Pipeline That Moves Itself
+# Next In Line — A Deterministic Hiring Pipeline
 
-## 📌 Challenge Context
+## 📌 Problem Context
 
 Small engineering teams often rely on spreadsheets to manage hiring pipelines. This leads to:
 
-* loss of visibility into applicant states
+* poor visibility into applicant states
 * manual tracking of waitlisted candidates
 * delays in follow-ups
-* no structured flow of progression
+* no consistent progression logic
 
-The goal of this system is to replace that with a **deterministic, self-moving pipeline** where applicants automatically progress based on system rules.
+The goal is to build a **lightweight system** where the pipeline manages itself — without manual intervention.
 
 ---
 
 ## 💡 Solution Overview
 
-This system enforces a **capacity-constrained pipeline**:
+This system enforces a **capacity-constrained hiring pipeline**:
 
-* A fixed number of applicants can be actively reviewed
-* Additional applicants are placed into a waitlist
+* A fixed number of applicants remain **ACTIVE**
+* Additional applicants enter a **WAITLIST**
 * When a slot opens, promotion happens automatically
-* No manual intervention is required
+* The system maintains strict ordering and fairness
 
 ---
 
 ## 🧠 Core Model
-```text
-            ┌────────────┐
-            │  APPLIED   │
-            └─────┬──────┘
-                  │
-        ┌─────────┴─────────┐
-        │                   │
-   (capacity free)     (capacity full)
-        │                   │
-   ┌────▼────┐         ┌────▼────┐
-   │  ACTIVE │         │ WAITLIST│
-   └────┬────┘         └────┬────┘
-        │                   │
-   (exit / decay)      (promotion)
-        │                   │
-   ┌────▼────┐         ┌────▼────┐
-   │ EXITED  │◄────────┤ ACTIVE  │
-   └─────────┘         └─────────┘
+
+```
+            APPLIED
+               │
+     ┌─────────┴─────────┐
+     │                   │
+ (capacity free)   (capacity full)
+     │                   │
+   ACTIVE            WAITLIST
+     │                   │
+ (exit / decay)     (promotion)
+     │                   │
+    EXITED ◄────────── ACTIVE
 ```
 
 ---
 
 ## ⚙️ Key Features
 
-### 1. Capacity-Based Control
+### Capacity-Based Control
 
 Each job defines an `activeCapacity`.
 
 * If space exists → applicant becomes `ACTIVE`
-* Otherwise → enters `WAITLIST`
+* Otherwise → applicant enters `WAITLIST`
 
 ---
 
-### 2. Deterministic Queue Ordering
+### Deterministic Queue Ordering
 
-Waitlist is ordered using:
+Waitlist ordering is based on:
 
 * `waitlist_eligible_at`
 * `queue_token`
 * `id` (tie-breaker)
 
-This guarantees:
+This ensures:
 
-* consistent ordering
 * fairness
-* deterministic behavior
+* consistency
+* predictable behavior
 
 ---
 
-### 3. Automatic Promotion
+### Automatic Promotion
 
 When an active applicant exits:
 
-```text
+```
 ACTIVE → EXITED → next WAITLIST → ACTIVE
 ```
 
-Handled by:
-
-```text
-fillVacancies()
-```
+Handled internally via the promotion loop.
 
 ---
 
-### 4. Exit Behavior
+### Exit Behavior
 
 Exit is treated as a **terminal state**:
 
-* Applicant is removed from pipeline
-* Not reinserted into queue
+* Applicant is removed permanently
+* Not reinserted into the queue
 
 This avoids:
 
 * reordering exploits
 * infinite loops
-* inconsistent queue state
+* inconsistent states
 
 ---
 
-### 5. Applicant Visibility
+### Applicant Visibility
 
 Applicants can view:
 
@@ -119,71 +110,53 @@ Applicants can view:
 
 When multiple applications target the last available slot:
 
-```text
-Request A → locks row
-Request B → waits
-```
+* Row-level locks are used (`SELECT ... FOR UPDATE`)
+* Only one transaction succeeds at a time
+* Others wait and re-evaluate state
 
-Implemented using:
-
-```sql
-SELECT ... FOR UPDATE
-```
-
-This ensures:
+This guarantees:
 
 * no over-allocation
-* strict consistency
-* safe concurrent writes
+* consistency under concurrent requests
 
 ---
 
 ## 🧾 Audit Logging
 
-Every transition is recorded.
+Every state transition is recorded:
 
-```text
-APPLIED → WAITLIST
-WAITLIST → ACTIVE
-ACTIVE → EXITED
-ACTIVE → WAITLIST (decay)
-```
+* APPLIED → WAITLIST
+* WAITLIST → ACTIVE
+* ACTIVE → EXITED
+* ACTIVE → WAITLIST (decay)
 
-Each log includes:
+Each log captures:
 
 * previous state
 * next state
 * timestamp
 * metadata
 
-This allows full reconstruction of system history.
+This allows full reconstruction of the pipeline history.
 
 ---
 
 ## ⏳ Inactivity Decay
 
-When promoted:
+When a waitlisted applicant is promoted:
 
-```text
+```
 ACTIVE + PENDING ACK
 ```
 
-If not acknowledged within deadline:
+If not acknowledged within a defined window:
 
-```text
-ACTIVE → WAITLIST (penalty)
-next WAITLIST → ACTIVE
+```
+ACTIVE → WAITLIST (penalized position)
+Next WAITLIST → ACTIVE
 ```
 
----
-
-### Flow
-
-```text
-WAITLIST → ACTIVE → (no ack) → WAITLIST (penalty)
-                          ↓
-                     next promoted
-```
+This keeps the pipeline moving without manual follow-up.
 
 ---
 
@@ -206,62 +179,56 @@ WAITLIST → ACTIVE → (no ack) → WAITLIST (penalty)
 
 Minimal by design:
 
-* Recruiter Dashboard
+* **Recruiter Dashboard**
 
   * Create job
   * View pipeline
 
-* Applicant Portal
+* **Applicant Portal**
 
   * Apply
   * Check status
-  * Withdraw
+  * Withdraw application
 
-Focus is on **state clarity, not UI complexity**.
+The frontend is intentionally **not real-time**.
+State updates are reflected on user-triggered actions to keep the system simple and predictable.
 
 ---
 
 ## ⚙️ Tech Stack
 
 * PostgreSQL
-* Express.js
-* Node.js
+* Node.js + Express
 * React
 
-No external queueing systems used.
+No external queueing systems are used — all logic is implemented internally.
 
 ---
 
-## 🧠 Design Decisions
+## ✅ Requirement Mapping
 
-### No external queue
-
-All ordering and promotion logic is handled internally for full control.
-
----
-
-### Transactions
-
-Used to maintain correctness under concurrent operations.
+* Capacity control → job.activeCapacity
+* Waitlist handling → WAITLIST state
+* Auto-promotion → internal promotion loop
+* Applicant visibility → status API
+* Concurrency → row-level locking
+* Logging → audit events
+* Inactivity decay → acknowledgement + penalty requeue
 
 ---
 
-### Terminal exit
+## ⚖️ Tradeoffs
 
-Ensures fairness and avoids reordering complexity.
-
----
-
-### Minimal frontend
-
-System is backend-driven; UI is only for interaction and visibility.
+* No real-time updates (simpler, deterministic UI)
+* Exit treated as terminal (avoids queue manipulation)
+* Internal queue logic over external tools (full control)
 
 ---
 
-## 🔄 Improvements (Future Work)
+## 🔄 Future Improvements
 
-* Full pipeline view for recruiter (all applicants per job)
-* Better UI for acknowledgement handling
+* Full recruiter view (all applicants per job)
+* Better acknowledgement UI
 * Pagination for large datasets
 * Metrics (conversion, drop-offs)
 
@@ -279,6 +246,9 @@ cd frontend
 npm install
 npm run dev
 ```
+
+---
+
 ## 📸 Screenshots
 
 ### Recruiter Dashboard
