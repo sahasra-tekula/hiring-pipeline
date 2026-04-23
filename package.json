@@ -1,0 +1,21 @@
+{
+  "name": "hiring-pipeline-queue",
+  "version": "1.0.0",
+  "description": "Production-grade hiring pipeline backend with PostgreSQL-backed waitlist promotion.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "worker": "node src/workers/standaloneWorker.js",
+    "migrate": "node src/db/migrate.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.6.1",
+    "express": "^4.22.1",
+    "pg": "^8.20.0"
+  }
+}
