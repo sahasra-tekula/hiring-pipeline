@@ -123,16 +123,16 @@ async function countQueueAhead(client, application) {
   return result.rows[0].queue_ahead;
 }
 
-async function findNextPromotableWaitlistedForUpdate(client, jobId, now) {
+async function findNextPromotableWaitlistedForUpdate(client, jobId) {
   const result = await client.query(
     `
       SELECT *
       FROM applications
       WHERE job_id = $1
-  AND status = 'WAITLIST'
-ORDER BY waitlist_eligible_at ASC, queue_token ASC, created_at ASC, id ASC
-LIMIT 1
-FOR UPDATE SKIP LOCKED
+        AND status = 'WAITLIST'
+      ORDER BY waitlist_entered_at ASC, id ASC
+      LIMIT 1
+      FOR UPDATE SKIP LOCKED
     `,
     [jobId],
   );
@@ -265,6 +265,19 @@ async function listJobsWithExpiredAcknowledgements(client, limit) {
   return result.rows.map((row) => row.job_id);
 }
 
+async function countActiveByJob(client, jobId) {
+  const result = await client.query(
+    `
+      SELECT COUNT(*)::INTEGER AS count
+      FROM applications
+      WHERE job_id = $1 AND status = 'ACTIVE'
+    `,
+    [jobId]
+  );
+
+  return result.rows[0].count;
+}
+
 module.exports = {
   acknowledge,
   countQueueAhead,
@@ -279,4 +292,5 @@ module.exports = {
   markExited,
   moveToWaitlist,
   promoteToActivePendingAck,
+  countActiveByJob,
 };

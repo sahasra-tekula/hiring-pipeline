@@ -153,29 +153,30 @@ async function moveApplicationToWaitlistWithPenalty(client, job, application, ac
   return updated;
 }
 
-async function fillVacancies(client, job, actor, now, reason = "rebalance") {
+async function fillVacancies(client, job, actor, reason = "rebalance") {
   const promotions = [];
 
   while (job.active_count < job.active_capacity) {
     const nextWaitlisted =
       await applicationRepository.findNextPromotableWaitlistedForUpdate(
         client,
-        job.id,
-        now,
+        job.id
       );
 
     if (!nextWaitlisted) {
       break;
     }
 
-    const deadline = addSeconds(now, job.ack_window_seconds);
+    const currentTime = new Date();
+    const deadline = addSeconds(currentTime, job.ack_window_seconds);
+
     const promoted = await applicationRepository.promoteToActivePendingAck(
       client,
       nextWaitlisted.id,
       {
-        last_promoted_at: now,
+        last_promoted_at: currentTime,
         ack_deadline_at: deadline,
-      },
+      }
     );
 
     job.active_count += 1;
@@ -538,8 +539,7 @@ async function exitApplication(applicationId, payload, actorInput) {
       client,
       job,
       { ...actor, type: "SYSTEM" },
-      now,
-      "slot_freed",
+      "slot_freed"
     );
     await jobRepository.updateCounters(client, job);
 
